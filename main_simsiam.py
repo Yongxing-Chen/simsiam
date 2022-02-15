@@ -26,7 +26,7 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
-
+from swin_transformer import SwinTransformer
 import simsiam.loader
 import simsiam.builder
 
@@ -35,20 +35,19 @@ model_names = sorted(name for name in models.__dict__
     and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-parser.add_argument('data', metavar='DIR',
+parser.add_argument('--data', type=str, default='./data/',
                     help='path to dataset')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
-                    choices=model_names,
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet50)')
-parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=512, type=int,
+parser.add_argument('-b', '--batch-size', default=64, type=int,
                     metavar='N',
                     help='mini-batch size (default: 512), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -74,7 +73,7 @@ parser.add_argument('--dist-backend', default='nccl', type=str,
                     help='distributed backend')
 parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
-parser.add_argument('--gpu', default=None, type=int,
+parser.add_argument('--gpu', default=0, type=int,
                     help='GPU id to use.')
 parser.add_argument('--multiprocessing-distributed', action='store_true',
                     help='Use multi-processing distributed training to launch '
@@ -149,9 +148,12 @@ def main_worker(gpu, ngpus_per_node, args):
         torch.distributed.barrier()
     # create model
     print("=> creating model '{}'".format(args.arch))
-    model = simsiam.builder.SimSiam(
-        models.__dict__[args.arch],
-        args.dim, args.pred_dim)
+    if args.arch == 'vit':
+        model = simsiam.builder.SimSiam(args, SwinTransformer, args.dim, args.pred_dim, pretrained=True)
+    else:
+        model = simsiam.builder.SimSiam(args,
+            models.__dict__[args.arch],
+            args.dim, args.pred_dim, pretrained=True)
 
     # infer learning rate before changing batch size
     init_lr = args.lr * args.batch_size / 256
@@ -180,7 +182,7 @@ def main_worker(gpu, ngpus_per_node, args):
         torch.cuda.set_device(args.gpu)
         model = model.cuda(args.gpu)
         # comment out the following line for debugging
-        raise NotImplementedError("Only DistributedDataParallel is supported.")
+        # raise NotImplementedError("Only DistributedDataParallel is supported.")
     else:
         # AllGather implementation (batch shuffle, queue update, etc.) in
         # this code only supports DistributedDataParallel.
@@ -196,9 +198,13 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         optim_params = model.parameters()
 
-    optimizer = torch.optim.SGD(optim_params, init_lr,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay)
+    if args.arch == "vit":
+        optimizer = torch.optim.AdamW(optim_params, eps=1e-8, betas=(0.9, 0.999),
+                                lr=init_lr, weight_decay=args.weight_decay)
+    else:
+        optimizer = torch.optim.SGD(optim_params, init_lr,
+                                    momentum=args.momentum,
+                                    weight_decay=args.weight_decay)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -222,9 +228,14 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # Data loading code
     traindir = os.path.join(args.data, 'train')
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-
+    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                  std=[0.229, 0.224, 0.225])
+    # cifar10
+    # normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+    #                                  std=[0.2470, 0.2435, 0.2616])
+    # cifar100
+    normalize = transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
+                                     std=[0.2675, 0.2565, 0.2761])
     # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
     augmentation = [
         transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
@@ -238,10 +249,13 @@ def main_worker(gpu, ngpus_per_node, args):
         normalize
     ]
 
-    train_dataset = datasets.ImageFolder(
-        traindir,
-        simsiam.loader.TwoCropsTransform(transforms.Compose(augmentation)))
-
+    # train_dataset = datasets.ImageFolder(
+    #     traindir,
+    #     simsiam.loader.TwoCropsTransform(transforms.Compose(augmentation)))
+    train_dataset = datasets.CIFAR10(root=traindir,
+                     train=True,
+                     transform=simsiam.loader.TwoCropsTransform(transforms.Compose(augmentation)),
+                     download=True)
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
@@ -251,22 +265,31 @@ def main_worker(gpu, ngpus_per_node, args):
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
 
+    last_loss = float("inf")
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, init_lr, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        avg_loss = train(train_loader, model, criterion, optimizer, epoch, args)
 
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': args.arch,
-                'state_dict': model.state_dict(),
-                'optimizer' : optimizer.state_dict(),
-            }, is_best=False, filename='checkpoint_{:04d}.pth.tar'.format(epoch))
+            if avg_loss < last_loss:
+                last_loss = avg_loss
+                torch.save({
+                    'epoch': epoch + 1,
+                    'arch': args.arch,
+                    'state_dict': model.state_dict(),
+                    'optimizer' : optimizer.state_dict(),
+                }, 'model_best.pth.tar')
+                # save_checkpoint({
+                #     'epoch': epoch + 1,
+                #     'arch': args.arch,
+                #     'state_dict': model.state_dict(),
+                #     'optimizer' : optimizer.state_dict(),
+                # }, is_best=False, filename='checkpoint_{:04d}.pth.tar'.format(epoch))
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
@@ -282,6 +305,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
+    avg_loss = 0
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -307,7 +331,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         if i % args.print_freq == 0:
             progress.display(i)
-
+        avg_loss += loss.item()
+    return avg_loss / len(train_loader)
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, filename)

@@ -12,7 +12,7 @@ class SimSiam(nn.Module):
     """
     Build a SimSiam model.
     """
-    def __init__(self, base_encoder, dim=2048, pred_dim=512):
+    def __init__(self, args, base_encoder, dim=2048, pred_dim=512, pretrained=True):
         """
         dim: feature dimension (default: 2048)
         pred_dim: hidden dimension of the predictor (default: 512)
@@ -21,7 +21,14 @@ class SimSiam(nn.Module):
 
         # create the encoder
         # num_classes is the output fc dimension, zero-initialize last BNs
-        self.encoder = base_encoder(num_classes=dim, zero_init_residual=True)
+        if args.arch == "vit":
+            self.encoder = base_encoder(num_classes=dim)
+            sd = torch.load("./swin_tiny_patch4_window7_224.pth", map_location='cpu')
+            self.encoder.load_state_dict(sd, strict=False)
+        else:
+            self.encoder = base_encoder(pretrained=pretrained)
+            in_features = self.encoder.fc.in_features
+            self.encoder.fc = nn.Linear(in_features, dim)
 
         # build a 3-layer projector
         prev_dim = self.encoder.fc.weight.shape[1]

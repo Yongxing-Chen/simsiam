@@ -66,3 +66,8 @@ class SimSiam(nn.Module):
         p2 = self.predictor(z2) # NxC
 
         return p1, p2, z1.detach(), z2.detach()
+
+
+def build_model(model, num_classes):
+    in_features = model.fc.in_features()
+    model.fc = nn.Linear()

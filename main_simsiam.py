@@ -231,11 +231,11 @@ def main_worker(gpu, ngpus_per_node, args):
     # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
     #                                  std=[0.229, 0.224, 0.225])
     # cifar10
-    # normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-    #                                  std=[0.2470, 0.2435, 0.2616])
-    # cifar100
-    normalize = transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
-                                     std=[0.2675, 0.2565, 0.2761])
+    normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                     std=[0.2470, 0.2435, 0.2616])
+    # # cifar100
+    # normalize = transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
+    #                                  std=[0.2675, 0.2565, 0.2761])
     # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
     augmentation = [
         transforms.RandomResizedCrop(224, scale=(0.2, 1.)),

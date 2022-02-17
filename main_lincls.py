@@ -27,7 +27,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 import copy
-from dataset import FewShotCifar10
+from dataset import FewShotCifar10, FewShotCifar100
 from swin_transformer import SwinTransformer
 
 model_names = sorted(name for name in models.__dict__
@@ -283,15 +283,22 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # Data loading code
     traindir = os.path.join(args.data, 'train')
-    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    #                                  std=[0.229, 0.224, 0.225])
-    # cifar10
-    normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-                                     std=[0.2470, 0.2435, 0.2616])
-    # # cifar100
-    # normalize = transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
-    #                                  std=[0.2675, 0.2565, 0.2761])
-    train_dataset = FewShotCifar10(traindir, "train", transforms.Compose([
+
+    if args.dataset == "cifar10":
+        # cifar10
+        normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                         std=[0.2470, 0.2435, 0.2616])
+
+        train_dataset = FewShotCifar10(traindir, "train", transforms.Compose([
+                transforms.RandomResizedCrop(224),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize]), args.n_shot)
+    else:
+        # cifar100
+        normalize = transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
+                                         std=[0.2675, 0.2565, 0.2761])
+        train_dataset = FewShotCifar100(traindir, "train", transforms.Compose([
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -337,7 +344,8 @@ def main_worker(gpu, ngpus_per_node, args):
         train(train_loader, model, criterion, optimizer, epoch, args)
 
         # evaluate on validation set
-        acc1 = validate(val_loader, model, criterion, args)
+        if epoch % 5 == 0:
+            acc1 = validate(val_loader, model, criterion, args)
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
@@ -352,8 +360,8 @@ def main_worker(gpu, ngpus_per_node, args):
                 'best_acc1': best_acc1,
                 'optimizer' : optimizer.state_dict(),
             }, is_best)
-            if epoch == args.start_epoch:
-                sanity_check(model.state_dict(), args.pretrained)
+            # if epoch == args.start_epoch:
+            #     sanity_check(model.state_dict(), args.pretrained)
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):

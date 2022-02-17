@@ -88,6 +88,7 @@ parser.add_argument('--pred-dim', default=512, type=int,
                     help='hidden dimension of the predictor (default: 512)')
 parser.add_argument('--fix-pred-lr', action='store_true',
                     help='Fix learning rate for the predictor')
+parser.add_argument('--dataset', choices=["cifar10", "cifar100"], default="cifar10")
 
 def main():
     args = parser.parse_args()
@@ -230,32 +231,49 @@ def main_worker(gpu, ngpus_per_node, args):
     traindir = os.path.join(args.data, 'train')
     # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
     #                                  std=[0.229, 0.224, 0.225])
-    # cifar10
-    normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-                                     std=[0.2470, 0.2435, 0.2616])
-    # # cifar100
-    # normalize = transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
-    #                                  std=[0.2675, 0.2565, 0.2761])
-    # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
-    augmentation = [
-        transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
-        transforms.RandomApply([
-            transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
-        ], p=0.8),
-        transforms.RandomGrayscale(p=0.2),
-        transforms.RandomApply([simsiam.loader.GaussianBlur([.1, 2.])], p=0.5),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        normalize
-    ]
-
     # train_dataset = datasets.ImageFolder(
     #     traindir,
     #     simsiam.loader.TwoCropsTransform(transforms.Compose(augmentation)))
-    train_dataset = datasets.CIFAR10(root=traindir,
-                     train=True,
-                     transform=simsiam.loader.TwoCropsTransform(transforms.Compose(augmentation)),
-                     download=True)
+
+    if args.dataset == "cifar10":
+        # cifar10
+        normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                         std=[0.2470, 0.2435, 0.2616])
+        augmentation = [
+            transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
+            transforms.RandomApply([
+                transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
+            ], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([simsiam.loader.GaussianBlur([.1, 2.])], p=0.5),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize
+        ]
+        train_dataset = datasets.CIFAR10(root=traindir,
+                                         train=True,
+                                         transform=simsiam.loader.TwoCropsTransform(transforms.Compose(augmentation)),
+                                         download=True)
+    else:
+        # cifar100
+        normalize = transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
+                                         std=[0.2675, 0.2565, 0.2761])
+        augmentation = [
+            transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
+            transforms.RandomApply([
+                transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
+            ], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([simsiam.loader.GaussianBlur([.1, 2.])], p=0.5),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize
+        ]
+        train_dataset = datasets.CIFAR100(root=traindir,
+                                         train=True,
+                                         transform=simsiam.loader.TwoCropsTransform(transforms.Compose(augmentation)),
+                                         download=True)
+
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:

@@ -160,6 +160,8 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         model = models.__dict__[args.arch]()
 
+    if args.contrast_pretrain:
+        args.pretrained = True
     # load from pre-trained, before DistributedDataParallel constructor
     if args.pretrained:
         if args.contrast_pretrain:

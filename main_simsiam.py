@@ -59,7 +59,7 @@ parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
-parser.add_argument('-p', '--print-freq', default=10, type=int,
+parser.add_argument('-p', '--print-freq', default=16, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
@@ -311,6 +311,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
+    num_iters = 256 / args.batch_size if args.batch_size  < 256 else 1
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4f')
@@ -324,6 +325,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
     end = time.time()
     avg_loss = 0
+
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -338,10 +340,21 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         losses.update(loss.item(), images[0].size(0))
 
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        if num_iters == 1:
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        else:
+            if i == 0:
+                optimizer.zero_grad()
+            loss.backward()
+            if (i + 1) % num_iters == 0:
+                for p in model.parameters():
+                    if p.requires_grad:
+                        p.grad /= num_iters
+                optimizer.step()
+                optimizer.zero_grad()
+
 
         # measure elapsed time
         batch_time.update(time.time() - end)

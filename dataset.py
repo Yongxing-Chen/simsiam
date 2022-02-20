@@ -191,6 +191,7 @@ if __name__ == '__main__':
     ])
 
     dataset = FewShotCifar10(traindir, "train", tf, 10)
+    print(dataset.train_y)
     dataset2 = copy.deepcopy(dataset)
     dataset2.mode = "val"
     print(len(dataset))

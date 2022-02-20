@@ -15,6 +15,7 @@ import time
 import warnings
 
 import torch
+import torch.optim as optim
 import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
@@ -52,7 +53,7 @@ parser.add_argument('-b', '--batch-size', default=16, type=int,
                     help='mini-batch size (default: 4096), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.05, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial (base) learning rate', dest='lr')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -212,7 +213,10 @@ def main_worker(gpu, ngpus_per_node, args):
 
 
     # infer learning rate before changing batch size
-    init_lr = args.lr * args.batch_size / 256
+    if args.contrast_pretrain:
+        init_lr = args.lr * args.batch_size / 256
+    else:
+        init_lr = args.lr
 
     if args.distributed:
         # For multiprocessing distributed, DistributedDataParallel constructor
@@ -254,6 +258,7 @@ def main_worker(gpu, ngpus_per_node, args):
     optimizer = torch.optim.SGD(parameters, init_lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [40], 0.1)
     if args.lars:
         print("=> use LARS optimizer.")
         from apex.parallel.LARC import LARC
@@ -340,13 +345,14 @@ def main_worker(gpu, ngpus_per_node, args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        adjust_learning_rate(optimizer, init_lr, epoch, args)
+        # if args.contrast_pretrain:
+        #     adjust_learning_rate(optimizer, init_lr, epoch, args)
 
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch, args)
-
+        scheduler.step()
         # evaluate on validation set
-        if epoch != 0 and epoch % 5 == 0:
+        if epoch % 5 == 0:
             acc1 = validate(val_loader, model, criterion, args)
 
         # remember best acc@1 and save checkpoint
@@ -384,8 +390,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     BatchNorm in train mode may revise running mean/std (even if it receives
     no gradient), which are part of the model parameters too.
     """
-    if args.probe:
-        model.eval()
+    # if args.probe:
+    #     model.eval()
 
     end = time.time()
     for i, (images, target) in enumerate(train_loader):

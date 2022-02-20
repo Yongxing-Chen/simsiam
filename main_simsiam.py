@@ -41,13 +41,13 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet50)')
-parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
-parser.add_argument('--epochs', default=100, type=int, metavar='N',
+parser.add_argument('--epochs', default=50, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=64, type=int,
+parser.add_argument('-b', '--batch-size', default=32, type=int,
                     metavar='N',
                     help='mini-batch size (default: 512), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -59,7 +59,7 @@ parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
-parser.add_argument('-p', '--print-freq', default=16, type=int,
+parser.add_argument('-p', '--print-freq', default=256, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
@@ -73,7 +73,7 @@ parser.add_argument('--dist-backend', default='nccl', type=str,
                     help='distributed backend')
 parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
-parser.add_argument('--gpu', default=0, type=int,
+parser.add_argument('--gpu', default=1, type=int,
                     help='GPU id to use.')
 parser.add_argument('--multiprocessing-distributed', action='store_true',
                     help='Use multi-processing distributed training to launch '
@@ -157,7 +157,8 @@ def main_worker(gpu, ngpus_per_node, args):
             args.dim, args.pred_dim, pretrained=True)
 
     # infer learning rate before changing batch size
-    init_lr = args.lr * args.batch_size / 256
+    # init_lr = args.lr * args.batch_size / 256
+    init_lr = args.lr
 
     if args.distributed:
         # Apply SyncBN
@@ -194,8 +195,10 @@ def main_worker(gpu, ngpus_per_node, args):
     criterion = nn.CosineSimilarity(dim=1).cuda(args.gpu)
 
     if args.fix_pred_lr:
-        optim_params = [{'params': model.module.encoder.parameters(), 'fix_lr': False},
-                        {'params': model.module.predictor.parameters(), 'fix_lr': True}]
+        # optim_params = [{'params': model.module.encoder.parameters(), 'fix_lr': False},
+        #                 {'params': model.module.predictor.parameters(), 'fix_lr': True}]
+        optim_params = [{'params': model.encoder.parameters(), 'fix_lr': False},
+                        {'params': model.predictor.parameters(), 'fix_lr': True}]
     else:
         optim_params = model.parameters()
 
@@ -291,7 +294,13 @@ def main_worker(gpu, ngpus_per_node, args):
 
         # train for one epoch
         avg_loss = train(train_loader, model, criterion, optimizer, epoch, args)
-
+        if epoch > 0 and epoch % 5 == 0:
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'arch': args.arch,
+                'state_dict': model.state_dict(),
+                'optimizer' : optimizer.state_dict(),
+            }, is_best=False, filename='checkpoint_{:04d}.pth.tar'.format(epoch))
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
             if avg_loss < last_loss:

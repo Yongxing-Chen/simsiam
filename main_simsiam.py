@@ -53,11 +53,11 @@ parser.add_argument('-b', '--batch-size', default=32, type=int,
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
 parser.add_argument('--lr', '--learning-rate', default=0.05, type=float,
-                    metavar='LR', help='initial (base) learning rate', dest='lr')
+                    metavar='LR', help='initial (base) learning rate, swin is 5e-4', dest='lr')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum of SGD solver')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
-                    metavar='W', help='weight decay (default: 1e-4)',
+                    metavar='W', help='weight decay (default: 1e-4), swin is 0.05',
                     dest='weight_decay')
 parser.add_argument('-p', '--print-freq', default=256, type=int,
                     metavar='N', help='print frequency (default: 10)')
@@ -89,7 +89,7 @@ parser.add_argument('--pred-dim', default=512, type=int,
 parser.add_argument('--fix-pred-lr', action='store_true',
                     help='Fix learning rate for the predictor')
 parser.add_argument('--dataset', choices=["cifar10", "cifar100"], default="cifar10")
-
+parser.add_argument('--pretrain', action="store_true")
 def main():
     args = parser.parse_args()
 
@@ -150,11 +150,11 @@ def main_worker(gpu, ngpus_per_node, args):
     # create model
     print("=> creating model '{}'".format(args.arch))
     if args.arch == 'vit':
-        model = simsiam.builder.SimSiam(args, SwinTransformer, args.dim, args.pred_dim, pretrained=True)
+        model = simsiam.builder.SimSiam(args, SwinTransformer, args.dim, args.pred_dim, pretrained=args.pretrain)
     else:
         model = simsiam.builder.SimSiam(args,
             models.__dict__[args.arch],
-            args.dim, args.pred_dim, pretrained=True)
+            args.dim, args.pred_dim, pretrained=args.pretrain)
 
     # infer learning rate before changing batch size
     # init_lr = args.lr * args.batch_size / 256

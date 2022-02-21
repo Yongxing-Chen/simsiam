@@ -174,9 +174,9 @@ def main_worker(gpu, ngpus_per_node, args):
                 state_dict = checkpoint['state_dict']
                 for k in list(state_dict.keys()):
                     # retain only encoder up to before the embedding layer
-                    if k.startswith('module.encoder') and not k.startswith('module.encoder.fc'):
+                    if k.startswith('encoder') and not k.startswith('encoder.fc'):
                         # remove prefix
-                        state_dict[k[len("module.encoder."):]] = state_dict[k]
+                        state_dict[k[len("encoder."):]] = state_dict[k]
                     # delete renamed or unused k
                     del state_dict[k]
 
@@ -332,8 +332,16 @@ def main_worker(gpu, ngpus_per_node, args):
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
-    val_dataset = copy.deepcopy(train_dataset)
-    val_dataset.mode = "val"
+    # val_dataset = copy.deepcopy(train_dataset)
+    # val_dataset.mode = "val"
+    val_dataset = datasets.CIFAR10(root=traindir, train=False, transform=transforms.Compose([
+                                                transforms.Resize(256),
+                                                transforms.CenterCrop(224),
+                                                transforms.ToTensor(),
+                                                transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                                                     std=[0.2470, 0.2435, 0.2616])
+                                            ]), download=True)
+
     val_loader = torch.utils.data.DataLoader(val_dataset,
                     batch_size=args.batch_size, shuffle=False,
                     num_workers=args.workers, pin_memory=True)
@@ -472,7 +480,7 @@ def validate(val_loader, model, criterion, args):
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
     if is_best:
-        shutil.copyfile(filename, 'model_best.pth.tar')
+        shutil.copyfile(filename, 'model_best_finetune.pth.tar')
 
 
 def sanity_check(state_dict, pretrained_weights):

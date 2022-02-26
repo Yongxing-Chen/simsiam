@@ -123,7 +123,7 @@ class FewShotCifar100(torchvision.datasets.CIFAR100):
             self.val_data = np.concatenate(val_data, axis=0)
             self.train_y = np.concatenate(train_y, axis=0).astype(np.compat.long)
             self.val_y = np.concatenate(val_y, axis=0).astype(np.compat.long)
-            indices = np.random.permutation(n_shot * 10)
+            indices = np.random.permutation(n_shot * 100)
             self.train_data = self.train_data[indices]
             self.train_y = self.train_y[indices]
             self.train_transform = transform

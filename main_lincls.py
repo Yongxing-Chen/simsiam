@@ -301,6 +301,13 @@ def main_worker(gpu, ngpus_per_node, args):
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 normalize]), args.n_shot)
+        val_dataset = datasets.CIFAR10(root=traindir, train=False, transform=transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                 std=[0.2470, 0.2435, 0.2616])
+        ]), download=True)
     else:
         # cifar100
         normalize = transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
@@ -310,7 +317,12 @@ def main_worker(gpu, ngpus_per_node, args):
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize]), args.n_shot)
-
+        val_dataset = datasets.CIFAR100(root=traindir, train=False, transform=transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5071, 0.4867, 0.4408],
+                                 std=[0.2675, 0.2565, 0.2761])]), download=True)
     # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
     #                                  std=[0.229, 0.224, 0.225])
 
@@ -334,13 +346,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # val_dataset = copy.deepcopy(train_dataset)
     # val_dataset.mode = "val"
-    val_dataset = datasets.CIFAR10(root=traindir, train=False, transform=transforms.Compose([
-                                                transforms.Resize(256),
-                                                transforms.CenterCrop(224),
-                                                transforms.ToTensor(),
-                                                transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-                                                                     std=[0.2470, 0.2435, 0.2616])
-                                            ]), download=True)
+
 
     val_loader = torch.utils.data.DataLoader(val_dataset,
                     batch_size=args.batch_size, shuffle=False,

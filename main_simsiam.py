@@ -88,7 +88,7 @@ parser.add_argument('--pred-dim', default=512, type=int,
                     help='hidden dimension of the predictor (default: 512)')
 parser.add_argument('--fix-pred-lr', action='store_true',
                     help='Fix learning rate for the predictor')
-parser.add_argument('--dataset', choices=["cifar10", "cifar100"], default="cifar10")
+parser.add_argument('--dataset', choices=["cifar10", "cifar100"], default="cifar100")
 parser.add_argument('--pretrain', action="store_true")
 def main():
     args = parser.parse_args()
